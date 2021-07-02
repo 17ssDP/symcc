@@ -19,6 +19,21 @@
 ///
 /// The configuration needs to be loaded so that we can apply settings related
 /// to symbolic input.
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void setInputFileDescriptor(int num);
+void setInputOffset(int num);
+void tryMallocAlternative(int size, long long int addr);
+void tryReadAlternative(void *buf, size_t nbyte);
+void setNullReturnExpression();
+void readSymbolic(void *buf, int n);
+
+#ifdef __cplusplus
+}
+#endif
+
 void initLibcWrappers();
 
 #endif

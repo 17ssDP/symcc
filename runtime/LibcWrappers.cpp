@@ -12,6 +12,13 @@
 // You should have received a copy of the GNU General Public License along with
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
+#include <Runtime.h>
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
@@ -20,15 +27,8 @@
 #include <string>
 #include <vector>
 
-#include <arpa/inet.h>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
-
 #include "Config.h"
 #include "Shadow.h"
-#include <Runtime.h>
 
 #define SYM(x) x##_symbolized
 
@@ -56,11 +56,10 @@ template <typename E, typename F>
 void tryAlternative(E *value, SymExpr valueExpr, F caller) {
   tryAlternative(reinterpret_cast<intptr_t>(value), valueExpr, caller);
 }
-} // namespace
+}  // namespace
 
 void initLibcWrappers() {
-  if (g_config.fullyConcrete)
-    return;
+  if (g_config.fullyConcrete) return;
 
   if (g_config.inputFile.empty()) {
     // Symbolic data comes from standard input.
@@ -70,6 +69,21 @@ void initLibcWrappers() {
 
 extern "C" {
 
+void setInputFileDescriptor(int num) {
+  std::cout<<"call setInputFileDescriptor, num = "<< num<<std::endl;
+  inputFileDescriptor = num; 
+}
+
+void setInputOffset(int num) {
+  std::cout << "call setInputOffset, num = " << num << std::endl;
+  inputFileDescriptor = num; 
+}
+
+void setNullReturnExpression() {
+  std::cout << "setNullReturnExpression"<< std::endl;
+  _sym_set_return_expression(nullptr);
+}
+
 void *SYM(malloc)(size_t size) {
   auto *result = malloc(size);
 
@@ -77,6 +91,11 @@ void *SYM(malloc)(size_t size) {
 
   _sym_set_return_expression(nullptr);
   return result;
+}
+
+void tryMallocAlternative(int size, long long int addr) {
+  std::cout << "tryMallocAlternative" << std::endl;
+  tryAlternative(size, _sym_get_parameter_expression(0), (void *)addr);
 }
 
 void *SYM(calloc)(size_t nmemb, size_t size) {
@@ -131,8 +150,7 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
   auto result = read(fildes, buf, nbyte);
   _sym_set_return_expression(nullptr);
 
-  if (result < 0)
-    return result;
+  if (result < 0) return result;
 
   if (fildes == inputFileDescriptor) {
     // Reading symbolic input.
@@ -145,6 +163,19 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
   }
 
   return result;
+}
+
+void tryReadAlternative(void *buf, size_t nbyte) {
+  std::cout << "tryReadAlternative" << std::endl;
+  tryAlternative(buf, _sym_get_parameter_expression(1), SYM(read));
+  tryAlternative(nbyte, _sym_get_parameter_expression(2), SYM(read));
+}
+
+void readSymbolic(void *buf, int n) {
+  std::cout << "readSymbolic" << std::endl;
+  ReadWriteShadow shadow(buf, n);
+  std::generate(shadow.begin(), shadow.end(),
+                []() { return _sym_get_input_byte(inputOffset++); });
 }
 
 // lseek is a bit tricky because, depending on preprocessor macros, glibc
@@ -164,14 +195,12 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
 uint64_t SYM(lseek64)(int fd, uint64_t offset, int whence) {
   auto result = lseek64(fd, offset, whence);
   _sym_set_return_expression(nullptr);
-  if (result == (off_t)-1)
-    return result;
+  if (result == (off_t)-1) return result;
 
   if (whence == SEEK_SET)
     _sym_set_return_expression(_sym_get_parameter_expression(1));
 
-  if (fd == inputFileDescriptor)
-    inputOffset = result;
+  if (fd == inputFileDescriptor) inputOffset = result;
 
   return result;
 }
@@ -182,8 +211,7 @@ uint32_t SYM(lseek)(int fd, uint32_t offset, int whence) {
   // Perform the same overflow check as glibc in the 32-bit version of lseek.
 
   auto result32 = (uint32_t)result;
-  if (result == result32)
-    return result32;
+  if (result == result32) return result32;
 
   errno = EOVERFLOW;
   return (uint32_t)-1;
@@ -280,13 +308,11 @@ int SYM(fseek)(FILE *stream, long offset, int whence) {
 
   auto result = fseek(stream, offset, whence);
   _sym_set_return_expression(nullptr);
-  if (result == -1)
-    return result;
+  if (result == -1) return result;
 
   if (fileno(stream) == inputFileDescriptor) {
     auto pos = ftell(stream);
-    if (pos == -1)
-      return -1;
+    if (pos == -1) return -1;
     inputOffset = pos;
   }
 
@@ -298,13 +324,11 @@ int SYM(fseeko)(FILE *stream, off_t offset, int whence) {
 
   auto result = fseeko(stream, offset, whence);
   _sym_set_return_expression(nullptr);
-  if (result == -1)
-    return result;
+  if (result == -1) return result;
 
   if (fileno(stream) == inputFileDescriptor) {
     auto pos = ftello(stream);
-    if (pos == -1)
-      return -1;
+    if (pos == -1) return -1;
     inputOffset = pos;
   }
 
@@ -316,13 +340,11 @@ int SYM(fseeko64)(FILE *stream, uint64_t offset, int whence) {
 
   auto result = fseeko64(stream, offset, whence);
   _sym_set_return_expression(nullptr);
-  if (result == -1)
-    return result;
+  if (result == -1) return result;
 
   if (fileno(stream) == inputFileDescriptor) {
     auto pos = ftello64(stream);
-    if (pos == -1)
-      return -1;
+    if (pos == -1) return -1;
     inputOffset = pos;
   }
 
@@ -365,8 +387,7 @@ int SYM(ungetc)(int c, FILE *stream) {
   auto result = ungetc(c, stream);
   _sym_set_return_expression(_sym_get_parameter_expression(0));
 
-  if (fileno(stream) == inputFileDescriptor && result != EOF)
-    inputOffset--;
+  if (fileno(stream) == inputFileDescriptor && result != EOF) inputOffset--;
 
   return result;
 }
@@ -418,8 +439,7 @@ char *SYM(strncpy)(char *dest, const char *src, size_t n) {
 
   size_t srcLen = strnlen(src, n);
   size_t copied = std::min(n, srcLen);
-  if (isConcrete(src, copied) && isConcrete(dest, n))
-    return result;
+  if (isConcrete(src, copied) && isConcrete(dest, n)) return result;
 
   auto srcShadow = ReadOnlyShadow(src, copied);
   auto destShadow = ReadWriteShadow(dest, n);
@@ -473,8 +493,7 @@ int SYM(memcmp)(const void *a, const void *b, size_t n) {
   auto result = memcmp(a, b, n);
   _sym_set_return_expression(nullptr);
 
-  if (isConcrete(a, n) && isConcrete(b, n))
-    return result;
+  if (isConcrete(a, n) && isConcrete(b, n)) return result;
 
   auto aShadowIt = ReadOnlyShadow(a, n).begin_non_null();
   auto bShadowIt = ReadOnlyShadow(b, n).begin_non_null();

@@ -45,6 +45,8 @@ bool SymbolizePass::doInitialization(Module &M) {
     auto name = function.getName();
     if (isInterceptedFunction(function))
       function.setName(name + "_symbolized");
+    if (isGoFunction(function))
+      function.setName(name + "Symbolized");
   }
 
   // Insert a constructor that initializes the runtime and any globals.

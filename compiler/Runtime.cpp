@@ -147,8 +147,6 @@ Runtime::Runtime(Module &M) {
       import(M, "_sym_read_memory", ptrT, intPtrType, intPtrType, int8T);
   writeMemory = import(M, "_sym_write_memory", voidT, intPtrType, intPtrType,
                        ptrT, int8T);
-  buildInsert =
-      import(M, "_sym_build_insert", ptrT, ptrT, ptrT, IRB.getInt64Ty(), int8T);
   buildExtract = import(M, "_sym_build_extract", ptrT, ptrT, IRB.getInt64Ty(),
                         IRB.getInt64Ty(), int8T);
 
@@ -166,4 +164,10 @@ bool isInterceptedFunction(const Function &f) {
       "memcmp",   "memmove", "ntohl",   "fgets",  "fgetc"};
 
   return (kInterceptedFunctions.count(f.getName()) > 0);
+}
+
+bool isGoFunction(const Function &f) {
+  static const StringSet<> goFunctions = {"gowrappers.Open", "gowrappers.Make", "gowrappers.Read"};
+
+  return (goFunctions.count(f.getName()) > 0);
 }

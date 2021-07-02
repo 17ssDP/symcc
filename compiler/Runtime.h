@@ -60,7 +60,6 @@ struct Runtime {
   SymFnT memmove{};
   SymFnT readMemory{};
   SymFnT writeMemory{};
-  SymFnT buildInsert{};
   SymFnT buildExtract{};
   SymFnT notifyCall{};
   SymFnT notifyRet{};
@@ -78,5 +77,6 @@ struct Runtime {
 };
 
 bool isInterceptedFunction(const llvm::Function &f);
+bool isGoFunction(const llvm::Function &f);
 
 #endif
